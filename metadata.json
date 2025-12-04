@@ -1,0 +1,5 @@
+{
+  "name": "Logic Grid Puzzle Minigame",
+  "description": "A classic 'lights out' style logic puzzle with a vibrant, colorful twist. Click a square to toggle its state and the state of its adjacent neighbors. The goal is to turn all the lights off.",
+  "requestFramePermissions": []
+}
