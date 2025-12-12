@@ -1,7 +1,6 @@
-
-import React from 'react';
+import React, { useMemo } from 'react';
 import GridCell from './GridCell';
-import type { Theme, CellState } from '../App';
+import type { Theme, CellState, WinIntensity } from '../App';
 
 interface GameBoardProps {
   board: CellState[][];
@@ -9,6 +8,8 @@ interface GameBoardProps {
   isWon: boolean;
   lastClick: { row: number, col: number, key: number } | null;
   theme: Theme;
+  pulseEnabled: boolean;
+  winIntensity: WinIntensity;
 }
 
 const getCellColor = (r: number, c: number, colors: string[]) => {
@@ -64,7 +65,53 @@ const ClickEffects: React.FC<ClickEffectsProps> = ({ lastClick, boardSize, theme
     );
 };
 
-const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isWon, lastClick, theme }) => {
+const VictoryEffects: React.FC<{ theme: Theme; intensity: WinIntensity }> = ({ theme, intensity }) => {
+    const particleCount = intensity === 'low' ? 10 : intensity === 'high' ? 60 : 30;
+
+    // Generate static random positions for sparkles to avoid re-renders jitter
+    const sparkles = useMemo(() => {
+        return Array.from({ length: particleCount }).map((_, i) => ({
+            id: i,
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+            animationDelay: `${Math.random() * 2}s`,
+            color: theme.cell.pathColors[i % theme.cell.pathColors.length],
+            size: Math.random() > 0.5 ? 'w-2 h-2' : 'w-1 h-1'
+        }));
+    }, [theme, particleCount]);
+
+    return (
+        <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden rounded-xl">
+            {/* Flash Overlay */}
+            <div className="absolute inset-0 victory-flash-animate mix-blend-overlay" />
+            
+            {/* Shockwaves - only for normal/high intensity */}
+            {intensity !== 'low' && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-1/2 h-1/2 rounded-full border-4 border-white opacity-0 victory-shockwave" style={{animationDelay: '0.1s'}} />
+                    <div className="w-1/2 h-1/2 rounded-full border-2 border-white opacity-0 victory-shockwave" style={{animationDelay: '0.4s'}} />
+                </div>
+            )}
+
+            {/* Sparkles */}
+            {sparkles.map((s) => (
+                <div 
+                    key={s.id}
+                    className={`absolute rounded-full victory-sparkle ${s.size}`}
+                    style={{
+                        left: s.left,
+                        top: s.top,
+                        backgroundColor: s.color,
+                        boxShadow: `0 0 8px 2px ${s.color}`,
+                        animationDelay: s.animationDelay
+                    }}
+                />
+            ))}
+        </div>
+    );
+};
+
+const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isWon, lastClick, theme, pulseEnabled, winIntensity }) => {
   const gradients: React.ReactElement[] = [];
   const pathways: { key: string; x1: string; y1: string; x2: string; y2: string; stroke: string }[] = [];
   const boardSize = board.length;
@@ -162,6 +209,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isWon, lastCl
                 isWon={isWon}
                 board={board}
                 theme={theme}
+                pulseEnabled={pulseEnabled}
               />
             ))
           )}
@@ -171,6 +219,9 @@ const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isWon, lastCl
         {lastClick && (
             <ClickEffects key={lastClick.key} lastClick={lastClick} boardSize={boardSize} theme={theme} />
         )}
+
+        {/* Victory Board Overlay */}
+        {isWon && <VictoryEffects theme={theme} intensity={winIntensity} />}
       </div>
     </div>
   );

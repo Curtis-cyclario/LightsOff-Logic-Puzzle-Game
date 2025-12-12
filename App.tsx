@@ -4,6 +4,7 @@ import GameBoard from './components/GameBoard';
 const SIZES = [3, 4, 5];
 type Waveform = 'sine' | 'square' | 'sawtooth' | 'triangle';
 type Difficulty = 'easy' | 'medium' | 'hard';
+export type WinIntensity = 'low' | 'normal' | 'high';
 
 export type CellState = {
     isOn: boolean;
@@ -286,6 +287,18 @@ const playSound = (
     }
 };
 
+const MenuIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+  </svg>
+);
+
+const XIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
 const RefreshIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 4l1.5 1.5A9 9 0 0120.5 10M20 20l-1.5-1.5A9 9 0 013.5 14" />
@@ -306,10 +319,17 @@ const App: React.FC = () => {
     const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
     const [pendingResetConfig, setPendingResetConfig] = useState<{size?: number, difficulty?: Difficulty} | null>(null);
 
+    // Settings Menu State
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    // Visual & Audio Settings
     const [themeName, setThemeName] = useState<ThemeName>(
         () => (localStorage.getItem('logicGridTheme') as ThemeName) || 'vibrant'
     );
-     useEffect(() => {
+    const [pulseEnabled, setPulseEnabled] = useState(true);
+    const [winIntensity, setWinIntensity] = useState<WinIntensity>('normal');
+    
+    useEffect(() => {
         localStorage.setItem('logicGridTheme', themeName);
     }, [themeName]);
     const currentTheme = THEMES[themeName];
@@ -419,49 +439,32 @@ const App: React.FC = () => {
 
     return (
         <div className={`min-h-screen ${currentTheme.bg} ${currentTheme.text} flex flex-col items-center justify-center p-4 font-sans transition-colors duration-500`}>
-            <div className="w-full max-w-md mx-auto text-center">
-                <header className="mb-6">
-                    <h1 className={`text-4xl sm:text-5xl font-bold ${currentTheme.header} tracking-tight`}>Logic Grid</h1>
-                    <p className={`${currentTheme.paragraph} mt-2 text-lg`}>Turn off all the lights to win.</p>
-                </header>
+            {/* Header Bar */}
+            <div className="w-full max-w-md flex justify-between items-center mb-6">
+                 <h1 className={`text-3xl sm:text-4xl font-bold ${currentTheme.header} tracking-tight`}>Logic Grid</h1>
+                 <button 
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                    aria-label="Open Settings"
+                 >
+                    <MenuIcon className="w-8 h-8" />
+                 </button>
+            </div>
                 
+            <div className="w-full max-w-md mx-auto text-center flex-grow flex flex-col justify-center">
                 <main className="flex flex-col items-center gap-4">
-                    <div className="flex flex-col gap-3 mb-2">
-                        <div className="flex justify-center gap-3">
-                            {SIZES.map(size => (
-                                <button
-                                    key={size}
-                                    onClick={() => resetGame(size)}
-                                    className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors duration-200 ${
-                                        boardSize === size
-                                            ? currentTheme.sizeButton.active
-                                            : currentTheme.sizeButton.inactive
-                                    }`}
-                                >
-                                    {size}x{size}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex justify-center gap-3">
-                             {(['easy', 'medium', 'hard'] as Difficulty[]).map(d => (
-                                <button
-                                    key={d}
-                                    onClick={() => resetGame(undefined, d)}
-                                    className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors duration-200 ${
-                                        difficulty === d
-                                            ? currentTheme.sizeButton.active
-                                            : currentTheme.sizeButton.inactive
-                                    }`}
-                                >
-                                    {d.charAt(0).toUpperCase() + d.slice(1)}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                    <GameBoard 
+                        board={board} 
+                        onCellClick={handleCellClick} 
+                        isWon={hasWon} 
+                        lastClick={lastClick} 
+                        theme={currentTheme}
+                        pulseEnabled={pulseEnabled}
+                        winIntensity={winIntensity}
+                    />
                     
-                    <GameBoard board={board} onCellClick={handleCellClick} isWon={hasWon} lastClick={lastClick} theme={currentTheme} />
-                    
-                    <div className={`w-full flex justify-between items-center ${currentTheme.panel} backdrop-blur-sm p-4 rounded-xl shadow-md`}>
+                    {/* Status & Action Bar */}
+                    <div className={`w-full flex justify-between items-center ${currentTheme.panel} backdrop-blur-sm p-4 rounded-xl shadow-md mt-4`}>
                         <div className="text-left flex-grow">
                              <div>
                                 <span className={`${currentTheme.paragraph} text-sm`}>MOVES</span>
@@ -473,50 +476,12 @@ const App: React.FC = () => {
                             className="flex-shrink-0 flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200"
                         >
                             <RefreshIcon className="w-5 h-5" />
-                            New
+                            Restart
                         </button>
                     </div>
 
-                    {/* Settings Panels */}
-                    <div className="w-full flex flex-col gap-3">
-                        <div className={`flex flex-col gap-3 ${currentTheme.panel} p-4 rounded-xl shadow-md`}>
-                             <span className={`${currentTheme.paragraph} text-sm font-semibold`}>THEME</span>
-                            <div className="grid grid-cols-3 gap-2">
-                                {(Object.keys(THEMES) as ThemeName[]).map(themeKey => (
-                                    <button key={themeKey} onClick={() => setThemeName(themeKey)} className={settingButtonClass(themeName === themeKey)}>
-                                        {THEMES[themeKey].name}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className={`flex flex-col gap-3 ${currentTheme.panel} p-4 rounded-xl shadow-md`}>
-                            <div className="flex justify-between items-center">
-                                <span className={`${currentTheme.paragraph} text-sm font-semibold`}>SOUND</span>
-                                <button onClick={() => setSoundEnabled(!soundEnabled)} className={settingButtonClass(soundEnabled)}>
-                                    {soundEnabled ? 'ON' : 'OFF'}
-                                </button>
-                            </div>
-                            {soundEnabled && (
-                                <div className="flex flex-col gap-3 animate-fade-in-up" style={{animationDuration: '0.3s'}}>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                        {(['sine', 'square', 'sawtooth', 'triangle'] as Waveform[]).map(wave => (
-                                            <button key={wave} onClick={() => setWaveform(wave)} className={settingButtonClass(waveform === wave)}>
-                                                {wave.charAt(0).toUpperCase() + wave.slice(1)}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <button onClick={() => setInteractiveSound(!interactiveSound)} className={`${settingButtonClass(interactiveSound)} w-full`}>
-                                        Interactive: {interactiveSound ? 'ON' : 'OFF'}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-
                     {hasWon && (
-                        <div className={`mt-4 p-4 ${currentTheme.winMessage} rounded-lg shadow-lg text-center win-message-animate`}>
+                        <div className={`w-full p-4 ${currentTheme.winMessage} rounded-lg shadow-lg text-center win-message-animate`}>
                             <p className="font-bold text-xl">Congratulations!</p>
                             <p>You solved it in {moves} moves.</p>
                         </div>
@@ -527,6 +492,137 @@ const App: React.FC = () => {
                     <p>Click a square to flip it and its neighbors.</p>
                 </footer>
             </div>
+
+            {/* Settings Drawer */}
+            {isSettingsOpen && (
+                <div className="fixed inset-0 z-40 flex justify-end">
+                    {/* Backdrop */}
+                    <div 
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+                        onClick={() => setIsSettingsOpen(false)}
+                    />
+                    
+                    {/* Drawer Panel */}
+                    <div className={`relative w-80 h-full ${currentTheme.bg} border-l border-white/10 shadow-2xl p-6 overflow-y-auto transform transition-transform duration-300`}>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className={`text-2xl font-bold ${currentTheme.header}`}>Settings</h2>
+                            <button onClick={() => setIsSettingsOpen(false)} className="p-1 rounded hover:bg-white/10">
+                                <XIcon className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-8 text-left">
+                            {/* Game Configuration */}
+                            <section>
+                                <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 ${currentTheme.paragraph}`}>Game Config</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-sm block mb-2 opacity-80">Grid Size</label>
+                                        <div className="flex gap-2">
+                                            {SIZES.map(size => (
+                                                <button
+                                                    key={size}
+                                                    onClick={() => resetGame(size)}
+                                                    className={`flex-1 ${settingButtonClass(boardSize === size)}`}
+                                                >
+                                                    {size}x{size}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm block mb-2 opacity-80">Difficulty</label>
+                                        <div className="flex gap-2">
+                                            {(['easy', 'medium', 'hard'] as Difficulty[]).map(d => (
+                                                <button
+                                                    key={d}
+                                                    onClick={() => resetGame(undefined, d)}
+                                                    className={`flex-1 ${settingButtonClass(difficulty === d)}`}
+                                                >
+                                                    {d.charAt(0).toUpperCase() + d.slice(1)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <hr className="border-white/10" />
+
+                            {/* Appearance */}
+                            <section>
+                                <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 ${currentTheme.paragraph}`}>Appearance</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-sm block mb-2 opacity-80">Theme</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {(Object.keys(THEMES) as ThemeName[]).map(themeKey => (
+                                                <button key={themeKey} onClick={() => setThemeName(themeKey)} className={settingButtonClass(themeName === themeKey)}>
+                                                    {THEMES[themeKey].name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-sm opacity-80">Pulse Animation</label>
+                                        <button onClick={() => setPulseEnabled(!pulseEnabled)} className={settingButtonClass(pulseEnabled)}>
+                                            {pulseEnabled ? 'ON' : 'OFF'}
+                                        </button>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-sm block mb-2 opacity-80">Win Animation</label>
+                                        <div className="flex gap-2">
+                                            {(['low', 'normal', 'high'] as WinIntensity[]).map(intensity => (
+                                                <button 
+                                                    key={intensity} 
+                                                    onClick={() => setWinIntensity(intensity)} 
+                                                    className={`flex-1 ${settingButtonClass(winIntensity === intensity)}`}
+                                                >
+                                                    {intensity.charAt(0).toUpperCase() + intensity.slice(1)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <hr className="border-white/10" />
+
+                            {/* Sound */}
+                            <section>
+                                <div className="flex justify-between items-center mb-3">
+                                    <h3 className={`text-sm font-bold uppercase tracking-wider ${currentTheme.paragraph}`}>Sound</h3>
+                                    <button onClick={() => setSoundEnabled(!soundEnabled)} className={settingButtonClass(soundEnabled)}>
+                                        {soundEnabled ? 'ON' : 'OFF'}
+                                    </button>
+                                </div>
+                                {soundEnabled && (
+                                    <div className="space-y-4 animate-fade-in-up">
+                                        <div>
+                                            <label className="text-sm block mb-2 opacity-80">Waveform</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {(['sine', 'square', 'sawtooth', 'triangle'] as Waveform[]).map(wave => (
+                                                    <button key={wave} onClick={() => setWaveform(wave)} className={settingButtonClass(waveform === wave)}>
+                                                        {wave.charAt(0).toUpperCase() + wave.slice(1)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-sm opacity-80">Interactive Audio</label>
+                                            <button onClick={() => setInteractiveSound(!interactiveSound)} className={settingButtonClass(interactiveSound)}>
+                                                {interactiveSound ? 'ON' : 'OFF'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </section>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Reset Confirmation Modal */}
             {showResetConfirm && (

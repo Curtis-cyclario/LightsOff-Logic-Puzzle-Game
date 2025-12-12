@@ -9,9 +9,10 @@ interface GridCellProps {
   isWon: boolean;
   board: CellState[][];
   theme: Theme;
+  pulseEnabled: boolean;
 }
 
-const GridCell: React.FC<GridCellProps> = ({ isOn, rowIndex, colIndex, onClick, isWon, board, theme }) => {
+const GridCell: React.FC<GridCellProps> = ({ isOn, rowIndex, colIndex, onClick, isWon, board, theme, pulseEnabled }) => {
   const scheme = theme.cell.schemes[(rowIndex + colIndex) % theme.cell.schemes.length];
   const boardSize = board.length;
 
@@ -24,9 +25,9 @@ const GridCell: React.FC<GridCellProps> = ({ isOn, rowIndex, colIndex, onClick, 
   const onStateOverlayClasses = `absolute inset-0 w-full h-full rounded-lg ${scheme.bg} shadow-xl ${scheme.shadow} transition-all duration-300 ease-in-out group-hover:brightness-110 group-hover:animate-none`;
   
   // The "on" state overlay should be hidden when the game is won
-  // Added 'kernel-animate' to enable the pulsing effect on active cells
+  // Added 'kernel-animate' to enable the pulsing effect on active cells, conditional on pulseEnabled
   const animationClasses = isOn && !isWon
-    ? 'scale-100 opacity-100 kernel-animate' 
+    ? `scale-100 opacity-100 ${pulseEnabled ? 'kernel-animate' : ''}` 
     : 'scale-75 opacity-0';
   
   const hasTopNeighbor = rowIndex > 0 && board[rowIndex - 1][colIndex].isOn;

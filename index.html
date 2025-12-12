@@ -113,6 +113,31 @@
         animation: win-cell-entry 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards,
                    win-glow 2.5s ease-in-out 0.5s infinite;
       }
+      /* New Victory Animations */
+      @keyframes victory-flash {
+        0% { background-color: rgba(255, 255, 255, 0); }
+        15% { background-color: rgba(255, 255, 255, 0.6); }
+        100% { background-color: rgba(255, 255, 255, 0); }
+      }
+      .victory-flash-animate {
+        animation: victory-flash 0.8s ease-out forwards;
+      }
+      @keyframes victory-shockwave {
+        0% { transform: scale(0); opacity: 0; border-width: 6px; }
+        10% { opacity: 0.8; }
+        100% { transform: scale(2.5); opacity: 0; border-width: 0px; }
+      }
+      .victory-shockwave {
+        animation: victory-shockwave 1.5s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+      }
+      @keyframes sparkle-twinkle {
+        0% { opacity: 0; transform: scale(0) rotate(0deg); }
+        50% { opacity: 1; transform: scale(1) rotate(180deg); }
+        100% { opacity: 0; transform: scale(0) rotate(360deg); }
+      }
+      .victory-sparkle {
+        animation: sparkle-twinkle 2.5s ease-in-out infinite;
+      }
     </style>
   <script type="importmap">
 {
