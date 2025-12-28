@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import GameBoard from './components/GameBoard';
 
 const SIZES = [3, 4, 5];
@@ -10,7 +10,6 @@ export type CellState = {
     isOn: boolean;
 };
 
-// --- THEME DEFINITIONS ---
 type ThemeName = 'vibrant' | 'synthwave' | 'noir';
 
 export type Theme = {
@@ -43,11 +42,11 @@ const THEMES: Record<ThemeName, Theme> = {
         header: 'text-violet-400',
         paragraph: 'text-gray-400',
         sizeButton: {
-            active: 'bg-violet-600 text-white shadow-md',
+            active: 'bg-violet-600 text-white shadow-md shadow-violet-600/30',
             inactive: 'bg-slate-800 hover:bg-slate-700 text-gray-300'
         },
-        panel: 'bg-slate-800/50',
-        winMessage: 'bg-emerald-500/20 border border-emerald-500 text-emerald-300',
+        panel: 'bg-slate-800/40 border border-white/5',
+        winMessage: 'bg-emerald-500/10 border border-emerald-500/50 text-emerald-300',
         cell: {
             schemes: [
                 { bg: 'bg-fuchsia-500', shadow: 'shadow-fuchsia-500/50', gradientFrom: 'from-fuchsia-500/70' },
@@ -80,55 +79,42 @@ const THEMES: Record<ThemeName, Theme> = {
     },
     noir: {
         name: 'Noir',
-        bg: 'bg-gray-900',
+        bg: 'bg-gray-950',
         text: 'text-gray-100',
-        header: 'text-white font-serif',
-        paragraph: 'text-gray-400',
+        header: 'text-white font-serif uppercase tracking-widest',
+        paragraph: 'text-gray-500',
         sizeButton: {
             active: 'bg-white text-black shadow-md',
-            inactive: 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+            inactive: 'bg-gray-800 hover:bg-gray-700 text-gray-300'
         },
-        panel: 'bg-gray-800/50',
-        winMessage: 'bg-gray-500/20 border border-gray-400 text-gray-200',
+        panel: 'bg-gray-900/50 border border-white/5',
+        winMessage: 'bg-gray-100/10 border border-gray-100/30 text-gray-100',
         cell: {
             schemes: [
                 { bg: 'bg-white', shadow: 'shadow-gray-400/50', gradientFrom: 'from-white/70' },
                 { bg: 'bg-gray-300', shadow: 'shadow-gray-500/50', gradientFrom: 'from-gray-300/70' },
-                { bg: 'bg-gray-400', shadow: 'shadow-gray-600/50', gradientFrom: 'from-gray-400/70' },
+                { bg: 'bg-gray-500', shadow: 'shadow-gray-600/50', gradientFrom: 'from-gray-500/70' },
             ],
             pathColors: ['#ffffff', '#d1d5db', '#9ca3af']
         }
     }
 };
 
-
-// Pure function to toggle a cell and its direct neighbors
 const toggleCellAndNeighbors = (row: number, col: number, currentBoard: CellState[][], boardSize: number): CellState[][] => {
-    const newBoard = currentBoard.map(r => r.map(c => ({ ...c }))); // Deep copy
-
+    const newBoard = currentBoard.map(r => r.map(c => ({ ...c })));
     const toggle = (r: number, c: number) => {
         if (r >= 0 && r < boardSize && c >= 0 && c < boardSize) {
             newBoard[r][c].isOn = !newBoard[r][c].isOn;
         }
     };
-
-    toggle(row, col); // Clicked cell
-    toggle(row - 1, col); // Top
-    toggle(row + 1, col); // Bottom
-    toggle(row, col - 1); // Left
-    toggle(row, col + 1); // Right
-
+    toggle(row, col); toggle(row - 1, col); toggle(row + 1, col); toggle(row, col - 1); toggle(row, col + 1);
     return newBoard;
 };
 
-// Helper function to create a new board, guaranteed to be solvable
 const createSolvableBoard = (boardSize: number, difficulty: Difficulty): CellState[][] => {
     let boardState: CellState[][] = Array(boardSize).fill(null).map(() => 
-        Array(boardSize).fill(null).map(() => ({
-            isOn: false,
-        }))
+        Array(boardSize).fill(null).map(() => ({ isOn: false }))
     );
-
     const scrambleToggle = (r: number, c: number, b: CellState[][]): CellState[][] => {
         const nextBoard = b.map(row => row.map(cell => ({...cell})));
         const toggle = (r_t: number, c_t: number) => {
@@ -139,289 +125,196 @@ const createSolvableBoard = (boardSize: number, difficulty: Difficulty): CellSta
         toggle(r, c); toggle(r-1,c); toggle(r+1,c); toggle(r,c-1); toggle(r,c+1);
         return nextBoard;
     };
-    
-    let scrambleMovesCount: number;
-    switch (difficulty) {
-        case 'easy':
-            scrambleMovesCount = Math.floor(boardSize * 1.5);
-            break;
-        case 'hard':
-            scrambleMovesCount = boardSize * boardSize;
-            break;
-        case 'medium':
-        default:
-            scrambleMovesCount = Math.floor(boardSize * 2.5);
-            break;
-    }
-
+    let scrambleMovesCount = difficulty === 'easy' ? Math.floor(boardSize * 1.5) : difficulty === 'hard' ? boardSize * boardSize : Math.floor(boardSize * 2.5);
     for (let i = 0; i < scrambleMovesCount; i++) {
         const randRow = Math.floor(Math.random() * boardSize);
         const randCol = Math.floor(Math.random() * boardSize);
         boardState = scrambleToggle(randRow, randCol, boardState);
     }
-
-    if (boardState.flat().every(cell => !cell.isOn)) {
-        return createSolvableBoard(boardSize, difficulty);
-    }
-
+    if (boardState.flat().every(cell => !cell.isOn)) return createSolvableBoard(boardSize, difficulty);
     return boardState;
 };
 
-// --- Audio Generation ---
-const playSound = (
-    type: 'click' | 'win' | 'reset', 
-    audioCtx: AudioContext | null,
-    options: { 
-        board?: CellState[][]; 
-        row?: number; 
-        col?: number; 
-        boardSize?: number;
-        soundSettings: {
-            enabled: boolean;
-            waveform: Waveform;
-            interactive: boolean;
-        }
-    }
-) => {
-    if (!audioCtx || !options.soundSettings.enabled) return;
-
-    const now = audioCtx.currentTime;
-    const { waveform, interactive } = options.soundSettings;
-    
-    if (type === 'click') {
-        const { board, row, col, boardSize } = options;
-        if (board === undefined || row === undefined || col === undefined || boardSize === undefined) return;
-
-        const pentatonicSteps = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
-        const totalCells = boardSize * boardSize;
-        const cellIndex = row * boardSize + col;
-        const scaleIndex = Math.round(((pentatonicSteps.length - 1) * cellIndex) / (totalCells - 1));
-        const note = pentatonicSteps[scaleIndex];
-        const rootFrequency = 220; // A2
-        const frequency = rootFrequency * Math.pow(2, note / 12);
-
-        if (interactive) {
-             const activeCells = board.flat().filter(cell => cell.isOn).length;
-            const onRatio = totalCells > 0 ? activeCells / totalCells : 0;
-
-            const getActiveNeighbors = (r: number, c: number, b: CellState[][], size: number): number => {
-                let count = 0;
-                if (r > 0 && b[r - 1][c].isOn) count++;
-                if (r < size - 1 && b[r + 1][c].isOn) count++;
-                if (c > 0 && b[r][c - 1].isOn) count++;
-                if (c < size - 1 && b[r][c + 1].isOn) count++;
-                return count;
-            };
-            const activeNeighbors = getActiveNeighbors(row, col, board, boardSize);
-            const neighborRatio = activeNeighbors / 4.0;
-
-            const mainOsc = audioCtx.createOscillator();
-            const mainGain = audioCtx.createGain();
-            mainOsc.type = waveform;
-            mainOsc.frequency.setValueAtTime(frequency, now);
-
-            const triOsc = audioCtx.createOscillator();
-            const triGain = audioCtx.createGain();
-            triOsc.type = 'triangle';
-            triOsc.frequency.setValueAtTime(frequency * 1.5, now);
-
-            const filter = audioCtx.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(6000, now);
-            filter.Q.setValueAtTime(1 + neighborRatio * 12, now);
-
-            const masterGain = audioCtx.createGain();
-            masterGain.gain.setValueAtTime(0.25, now);
-            masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
-
-            mainGain.gain.setValueAtTime(1 - (onRatio * 0.7), now);
-            triGain.gain.setValueAtTime(onRatio * 0.5, now);
-
-            mainOsc.connect(mainGain).connect(masterGain);
-            triOsc.connect(triGain).connect(masterGain);
-            masterGain.connect(filter).connect(audioCtx.destination);
-            
-            mainOsc.start(now);
-            mainOsc.stop(now + 0.15);
-            triOsc.start(now);
-            triOsc.stop(now + 0.15);
-        } else {
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.type = waveform;
-            oscillator.frequency.setValueAtTime(frequency, now);
-            gainNode.gain.setValueAtTime(0.2, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
-            oscillator.connect(gainNode).connect(audioCtx.destination);
-            oscillator.start(now);
-            oscillator.stop(now + 0.15);
-        }
-    }
-
-    if (type === 'win') {
-        const notes = [523.25, 659.25, 783.99, 1046.50];
-        notes.forEach((freq, i) => {
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.type = waveform;
-            oscillator.frequency.setValueAtTime(freq, now + i * 0.12);
-            gainNode.gain.setValueAtTime(0.25, now + i * 0.12);
-            gainNode.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.12 + 0.1);
-            oscillator.connect(gainNode).connect(audioCtx.destination);
-            oscillator.start(now + i * 0.12);
-            oscillator.stop(now + i * 0.12 + 0.1);
-        });
-    }
-
-    if (type === 'reset') {
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        oscillator.type = waveform;
-        oscillator.frequency.setValueAtTime(440, now);
-        oscillator.frequency.exponentialRampToValueAtTime(110, now + 0.2);
-        gainNode.gain.setValueAtTime(0.2, now);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
-        oscillator.connect(gainNode).connect(audioCtx.destination);
-        oscillator.start(now);
-        oscillator.stop(now + 0.2);
-    }
+const STORAGE_KEYS = {
+    THEME: 'logicGrid_theme',
+    BEST_SCORES: 'logicGrid_bestScores',
+    SOUND: 'logicGrid_soundEnabled',
+    WAVEFORM: 'logicGrid_waveform',
+    INTERACTIVE: 'logicGrid_interactiveSound',
+    PULSE: 'logicGrid_pulseEnabled',
+    INTENSITY: 'logicGrid_intensity',
+    SAVED_GAME: 'logicGrid_savedGame'
 };
 
-const MenuIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-  </svg>
-);
-
-const XIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-  </svg>
-);
-
-const RefreshIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 4l1.5 1.5A9 9 0 0120.5 10M20 20l-1.5-1.5A9 9 0 013.5 14" />
-  </svg>
-);
-
-
 const App: React.FC = () => {
+    // Basic Game State
     const [boardSize, setBoardSize] = useState<number>(3);
     const [difficulty, setDifficulty] = useState<Difficulty>('medium');
-    const [board, setBoard] = useState<CellState[][]>(() => createSolvableBoard(boardSize, difficulty));
+    const [board, setBoard] = useState<CellState[][]>(() => Array(3).fill(null).map(() => Array(3).fill({ isOn: false })));
+    const [history, setHistory] = useState<CellState[][][]>([]);
     const [moves, setMoves] = useState<number>(0);
     const [hasWon, setHasWon] = useState<boolean>(false);
+    
+    // UI Feedback
     const [animateMoves, setAnimateMoves] = useState<boolean>(false);
     const [lastClick, setLastClick] = useState<{ row: number, col: number, key: number } | null>(null);
-
-    // Reset Confirmation State
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
     const [pendingResetConfig, setPendingResetConfig] = useState<{size?: number, difficulty?: Difficulty} | null>(null);
 
-    // Settings Menu State
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    // Settings
+    const [themeName, setThemeName] = useState<ThemeName>(() => (localStorage.getItem(STORAGE_KEYS.THEME) as ThemeName) || 'vibrant');
+    const [pulseEnabled, setPulseEnabled] = useState(() => localStorage.getItem(STORAGE_KEYS.PULSE) !== 'false');
+    const [winIntensity, setWinIntensity] = useState<WinIntensity>(() => (localStorage.getItem(STORAGE_KEYS.INTENSITY) as WinIntensity) || 'normal');
+    const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem(STORAGE_KEYS.SOUND) !== 'false');
+    const [waveform, setWaveform] = useState<Waveform>(() => (localStorage.getItem(STORAGE_KEYS.WAVEFORM) as Waveform) || 'sine');
+    const [interactiveSound, setInteractiveSound] = useState(() => localStorage.getItem(STORAGE_KEYS.INTERACTIVE) !== 'false');
 
-    // Visual & Audio Settings
-    const [themeName, setThemeName] = useState<ThemeName>(
-        () => (localStorage.getItem('logicGridTheme') as ThemeName) || 'vibrant'
-    );
-    const [pulseEnabled, setPulseEnabled] = useState(true);
-    const [winIntensity, setWinIntensity] = useState<WinIntensity>('normal');
-    
-    useEffect(() => {
-        localStorage.setItem('logicGridTheme', themeName);
-    }, [themeName]);
+    // Stats
+    const [bestScores, setBestScores] = useState<Record<string, number>>(() => {
+        const saved = localStorage.getItem(STORAGE_KEYS.BEST_SCORES);
+        return saved ? JSON.parse(saved) : {};
+    });
+
     const currentTheme = THEMES[themeName];
-
-    const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-    const [waveform, setWaveform] = useState<Waveform>('sine');
-    const [interactiveSound, setInteractiveSound] = useState<boolean>(true);
-    
     const audioContextRef = useRef<AudioContext | null>(null);
+
+    // Initial Load Persistence
+    useEffect(() => {
+        const savedGame = localStorage.getItem(STORAGE_KEYS.SAVED_GAME);
+        if (savedGame) {
+            const data = JSON.parse(savedGame);
+            setBoard(data.board);
+            setMoves(data.moves);
+            setBoardSize(data.boardSize);
+            setDifficulty(data.difficulty);
+            setHistory(data.history || []);
+            setHasWon(data.hasWon);
+        } else {
+            setBoard(createSolvableBoard(3, 'medium'));
+        }
+    }, []);
+
+    // Save Game State
+    useEffect(() => {
+        if (!hasWon) {
+            localStorage.setItem(STORAGE_KEYS.SAVED_GAME, JSON.stringify({
+                board, moves, boardSize, difficulty, history, hasWon
+            }));
+        } else {
+            localStorage.removeItem(STORAGE_KEYS.SAVED_GAME);
+        }
+    }, [board, moves, boardSize, difficulty, history, hasWon]);
+
+    // Save Settings
+    useEffect(() => {
+        localStorage.setItem(STORAGE_KEYS.THEME, themeName);
+        localStorage.setItem(STORAGE_KEYS.PULSE, String(pulseEnabled));
+        localStorage.setItem(STORAGE_KEYS.INTENSITY, winIntensity);
+        localStorage.setItem(STORAGE_KEYS.SOUND, String(soundEnabled));
+        localStorage.setItem(STORAGE_KEYS.WAVEFORM, waveform);
+        localStorage.setItem(STORAGE_KEYS.INTERACTIVE, String(interactiveSound));
+    }, [themeName, pulseEnabled, winIntensity, soundEnabled, waveform, interactiveSound]);
 
     const initAudio = useCallback(() => {
         if (!audioContextRef.current) {
             try {
                 audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-            } catch (e) {
-                console.error("Web Audio API is not supported in this browser");
-            }
+            } catch (e) { console.error("Audio API error", e); }
         }
-        const audioCtx = audioContextRef.current;
-        if (audioCtx && audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
-        return audioCtx;
+        if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
+        return audioContextRef.current;
     }, []);
 
-    const getSoundSettings = useCallback(() => ({
-        enabled: soundEnabled,
-        waveform,
-        interactive: interactiveSound
-    }), [soundEnabled, waveform, interactiveSound]);
-    
-    useEffect(() => {
-        if (hasWon) {
-            const audioCtx = initAudio();
-            setTimeout(() => playSound('win', audioCtx, { soundSettings: getSoundSettings() }), 100);
+    const playSoundEffect = useCallback((type: 'click' | 'win' | 'reset', row?: number, col?: number) => {
+        if (!soundEnabled) return;
+        const ctx = initAudio();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        
+        if (type === 'click' && row !== undefined && col !== undefined) {
+            const pentatonic = [220, 246.94, 277.18, 329.63, 369.99, 440, 493.88, 554.37, 659.25, 739.99];
+            const index = Math.floor(((row * boardSize + col) / (boardSize * boardSize)) * pentatonic.length);
+            const freq = pentatonic[index % pentatonic.length];
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = waveform;
+            osc.frequency.setValueAtTime(freq, now);
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(); osc.stop(now + 0.2);
+        } else if (type === 'win') {
+            [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(f, now + i * 0.1);
+                gain.gain.setValueAtTime(0.1, now + i * 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.1 + 0.3);
+                osc.connect(gain).connect(ctx.destination);
+                osc.start(now + i * 0.1); osc.stop(now + i * 0.1 + 0.3);
+            });
+        } else if (type === 'reset') {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.frequency.setValueAtTime(440, now);
+            osc.frequency.exponentialRampToValueAtTime(110, now + 0.2);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(); osc.stop(now + 0.2);
         }
-    }, [hasWon, initAudio, getSoundSettings]);
-
-    useEffect(() => {
-        if (moves > 0) {
-            setAnimateMoves(true);
-            const timer = setTimeout(() => setAnimateMoves(false), 300);
-            return () => clearTimeout(timer);
-        }
-    }, [moves]);
+    }, [soundEnabled, waveform, boardSize, initAudio]);
 
     const handleCellClick = useCallback((row: number, col: number) => {
         if (hasWon) return;
-
-        const audioCtx = initAudio();
+        setHistory(prev => [...prev, board.map(r => r.map(c => ({...c})))].slice(-20));
         const newBoard = toggleCellAndNeighbors(row, col, board, boardSize);
-        
-        playSound('click', audioCtx, { board: newBoard, row, col, boardSize, soundSettings: getSoundSettings() });
-        setMoves(prevMoves => prevMoves + 1);
-        setLastClick({ row, col, key: Date.now() });
-
-        const isWinningState = newBoard.flat().every(cell => !cell.isOn);
-        if (isWinningState) {
-            setBoard(newBoard);
-            setHasWon(true);
-            return;
-        }
-
         setBoard(newBoard);
-    }, [board, hasWon, boardSize, initAudio, getSoundSettings]);
+        setMoves(m => m + 1);
+        setLastClick({ row, col, key: Date.now() });
+        setAnimateMoves(true);
+        setTimeout(() => setAnimateMoves(false), 300);
+        playSoundEffect('click', row, col);
 
-    // Performs the actual reset
+        if (newBoard.flat().every(cell => !cell.isOn)) {
+            setHasWon(true);
+            playSoundEffect('win');
+            const key = `${boardSize}-${difficulty}`;
+            const currentBest = bestScores[key];
+            if (!currentBest || moves + 1 < currentBest) {
+                const newBest = { ...bestScores, [key]: moves + 1 };
+                setBestScores(newBest);
+                localStorage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(newBest));
+            }
+        }
+    }, [board, boardSize, hasWon, moves, bestScores, difficulty, playSoundEffect]);
+
+    const undo = useCallback(() => {
+        if (history.length === 0 || hasWon) return;
+        const previous = history[history.length - 1];
+        setBoard(previous);
+        setHistory(prev => prev.slice(0, -1));
+        setMoves(m => Math.max(0, m - 1));
+        playSoundEffect('reset');
+    }, [history, hasWon, playSoundEffect]);
+
     const executeReset = (newSize?: number, newDifficulty?: Difficulty) => {
-        const audioCtx = initAudio();
-        playSound('reset', audioCtx, { soundSettings: getSoundSettings() });
-
         const sizeToUse = newSize || boardSize;
         const difficultyToUse = newDifficulty || difficulty;
-        
-        if (newSize && newSize !== boardSize) {
-            setBoardSize(newSize);
-        }
-        if (newDifficulty && newDifficulty !== difficulty) {
-            setDifficulty(newDifficulty);
-        }
+        setBoardSize(sizeToUse);
+        setDifficulty(difficultyToUse);
         setBoard(createSolvableBoard(sizeToUse, difficultyToUse));
         setMoves(0);
         setHasWon(false);
-
-        // Clear confirmation states
+        setHistory([]);
         setShowResetConfirm(false);
         setPendingResetConfig(null);
+        playSoundEffect('reset');
     };
 
-    // Public reset handler that checks if confirmation is needed
     const resetGame = (newSize?: number, newDifficulty?: Difficulty) => {
-        // If the game is in progress (moves > 0) and is not already won, ask for confirmation
         if (moves > 0 && !hasWon) {
             setPendingResetConfig({ size: newSize, difficulty: newDifficulty });
             setShowResetConfirm(true);
@@ -430,116 +323,124 @@ const App: React.FC = () => {
         }
     };
 
-    const settingButtonClass = (isActive: boolean) =>
-      `px-3 py-1.5 rounded-md text-xs font-semibold transition-colors duration-200 ${
-        isActive
-          ? currentTheme.sizeButton.active
-          : currentTheme.sizeButton.inactive
-      }`;
+    const currentBestKey = `${boardSize}-${difficulty}`;
+    const currentBestScore = bestScores[currentBestKey];
 
     return (
-        <div className={`min-h-screen ${currentTheme.bg} ${currentTheme.text} flex flex-col items-center justify-center p-4 font-sans transition-colors duration-500`}>
-            {/* Header Bar */}
-            <div className="w-full max-w-md flex justify-between items-center mb-6">
-                 <h1 className={`text-3xl sm:text-4xl font-bold ${currentTheme.header} tracking-tight`}>Logic Grid</h1>
-                 <button 
-                    onClick={() => setIsSettingsOpen(true)}
-                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-                    aria-label="Open Settings"
-                 >
-                    <MenuIcon className="w-8 h-8" />
+        <div className={`fixed inset-0 overflow-hidden ${currentTheme.bg} ${currentTheme.text} flex flex-col items-center p-4 font-sans select-none transition-colors duration-700`}>
+            {/* Nav */}
+            <header className="w-full max-w-md flex justify-between items-center mt-2 mb-6">
+                 <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-violet-600 flex items-center justify-center shadow-lg shadow-violet-600/30">
+                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                    </div>
+                    <h1 className={`text-2xl font-black uppercase tracking-tighter ${currentTheme.header}`}>Logic Grid</h1>
+                 </div>
+                 <button onClick={() => setIsSettingsOpen(true)} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 active:scale-90 transition-all">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+                    </svg>
                  </button>
-            </div>
-                
-            <div className="w-full max-w-md mx-auto text-center flex-grow flex flex-col justify-center">
-                <main className="flex flex-col items-center gap-4">
-                    <GameBoard 
-                        board={board} 
-                        onCellClick={handleCellClick} 
-                        isWon={hasWon} 
-                        lastClick={lastClick} 
-                        theme={currentTheme}
-                        pulseEnabled={pulseEnabled}
-                        winIntensity={winIntensity}
-                    />
-                    
-                    {/* Status & Action Bar */}
-                    <div className={`w-full flex justify-between items-center ${currentTheme.panel} backdrop-blur-sm p-4 rounded-xl shadow-md mt-4`}>
-                        <div className="text-left flex-grow">
-                             <div>
-                                <span className={`${currentTheme.paragraph} text-sm`}>MOVES</span>
-                                <p className={`text-2xl font-bold ${animateMoves ? 'move-counter-animate' : ''}`}>{moves}</p>
-                            </div>
+            </header>
+
+            <main className="w-full max-w-md flex-grow flex flex-col items-center justify-center gap-6 overflow-y-auto pb-8">
+                <GameBoard 
+                    board={board} onCellClick={handleCellClick} isWon={hasWon} 
+                    lastClick={lastClick} theme={currentTheme} pulseEnabled={pulseEnabled} 
+                    winIntensity={winIntensity}
+                />
+
+                <div className={`w-full ${currentTheme.panel} backdrop-blur-md p-5 rounded-2xl shadow-xl flex items-center gap-6`}>
+                    <div className="flex-grow">
+                        <span className="text-[10px] font-bold opacity-40 uppercase tracking-widest block mb-1">Moves</span>
+                        <div className={`text-3xl font-black tabular-nums ${animateMoves ? 'move-counter-animate' : ''}`}>
+                            {moves}
                         </div>
-                        <button 
-                            onClick={() => resetGame()}
-                            className="flex-shrink-0 flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200"
-                        >
-                            <RefreshIcon className="w-5 h-5" />
-                            Restart
-                        </button>
                     </div>
 
-                    {hasWon && (
-                        <div className={`w-full p-4 ${currentTheme.winMessage} rounded-lg shadow-lg text-center win-message-animate`}>
-                            <p className="font-bold text-xl">Congratulations!</p>
-                            <p>You solved it in {moves} moves.</p>
+                    <div className="flex gap-2">
+                        <button 
+                            disabled={history.length === 0 || hasWon}
+                            onClick={undo}
+                            className="p-3 rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-20 disabled:scale-100 active:scale-90 transition-all"
+                            title="Undo"
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            </svg>
+                        </button>
+                        <button 
+                            onClick={() => resetGame()}
+                            className="p-3 rounded-xl bg-violet-600 text-white shadow-lg shadow-violet-600/30 hover:brightness-110 active:scale-95 transition-all"
+                            title="Restart"
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 4l1.5 1.5A9 9 0 0120.5 10M20 20l-1.5-1.5A9 9 0 013.5 14" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                {hasWon && (
+                    <div className={`w-full p-6 ${currentTheme.winMessage} rounded-2xl shadow-2xl win-message-animate flex flex-col items-center gap-2`}>
+                        <h2 className="text-2xl font-black italic uppercase tracking-tighter">Victorious!</h2>
+                        <div className="text-sm opacity-80">
+                            {currentBestScore === moves ? (
+                                <span className="flex items-center gap-1 font-bold text-yellow-400">
+                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                                    New Personal Best
+                                </span>
+                            ) : `Solved in ${moves} moves.`}
                         </div>
-                    )}
-                </main>
+                        <button 
+                            onClick={() => resetGame()} 
+                            className="mt-2 text-xs font-bold uppercase tracking-widest underline underline-offset-4 decoration-2 hover:opacity-70 transition-opacity"
+                        >
+                            Play Again
+                        </button>
+                    </div>
+                )}
+            </main>
 
-                <footer className="mt-8 text-gray-500 text-sm">
-                    <p>Click a square to flip it and its neighbors.</p>
-                </footer>
-            </div>
-
-            {/* Settings Drawer */}
+            {/* Sidebar Settings Drawer */}
             {isSettingsOpen && (
-                <div className="fixed inset-0 z-40 flex justify-end">
-                    {/* Backdrop */}
-                    <div 
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
-                        onClick={() => setIsSettingsOpen(false)}
-                    />
-                    
-                    {/* Drawer Panel */}
-                    <div className={`relative w-80 h-full ${currentTheme.bg} border-l border-white/10 shadow-2xl p-6 overflow-y-auto transform transition-transform duration-300`}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className={`text-2xl font-bold ${currentTheme.header}`}>Settings</h2>
-                            <button onClick={() => setIsSettingsOpen(false)} className="p-1 rounded hover:bg-white/10">
-                                <XIcon className="w-6 h-6" />
+                <div className="fixed inset-0 z-50 flex justify-end">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm backdrop-fade" onClick={() => setIsSettingsOpen(false)} />
+                    <aside className={`relative w-80 h-full ${currentTheme.bg} border-l border-white/10 shadow-2xl p-6 drawer-animate flex flex-col`}>
+                        <div className="flex justify-between items-center mb-8">
+                            <h2 className="text-2xl font-black uppercase italic tracking-tighter">Config</h2>
+                            <button onClick={() => setIsSettingsOpen(false)} className="p-2 bg-white/5 rounded-lg">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                             </button>
                         </div>
 
-                        <div className="space-y-8 text-left">
-                            {/* Game Configuration */}
+                        <div className="space-y-10 overflow-y-auto pr-2 pb-8">
                             <section>
-                                <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 ${currentTheme.paragraph}`}>Game Config</h3>
+                                <label className="text-[10px] font-bold uppercase tracking-widest opacity-40 mb-3 block">Level Setup</label>
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="text-sm block mb-2 opacity-80">Grid Size</label>
-                                        <div className="flex gap-2">
-                                            {SIZES.map(size => (
-                                                <button
-                                                    key={size}
-                                                    onClick={() => resetGame(size)}
-                                                    className={`flex-1 ${settingButtonClass(boardSize === size)}`}
-                                                >
-                                                    {size}x{size}
+                                        <div className="flex justify-between items-center text-xs mb-2">
+                                            <span className="opacity-60">Board Density</span>
+                                            <span className="font-bold">{boardSize}x{boardSize}</span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {SIZES.map(s => (
+                                                <button key={s} onClick={() => resetGame(s)} className={`py-2 rounded-xl text-xs font-bold transition-all ${boardSize === s ? currentTheme.sizeButton.active : currentTheme.sizeButton.inactive}`}>
+                                                    {s}x{s}
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="text-sm block mb-2 opacity-80">Difficulty</label>
+                                        <div className="text-xs opacity-60 mb-2">Complexity</div>
                                         <div className="flex gap-2">
                                             {(['easy', 'medium', 'hard'] as Difficulty[]).map(d => (
-                                                <button
-                                                    key={d}
-                                                    onClick={() => resetGame(undefined, d)}
-                                                    className={`flex-1 ${settingButtonClass(difficulty === d)}`}
-                                                >
-                                                    {d.charAt(0).toUpperCase() + d.slice(1)}
+                                                <button key={d} onClick={() => resetGame(undefined, d)} className={`flex-1 py-2 rounded-xl text-xs font-bold capitalize transition-all ${difficulty === d ? currentTheme.sizeButton.active : currentTheme.sizeButton.inactive}`}>
+                                                    {d}
                                                 </button>
                                             ))}
                                         </div>
@@ -547,111 +448,70 @@ const App: React.FC = () => {
                                 </div>
                             </section>
 
-                            <hr className="border-white/10" />
-
-                            {/* Appearance */}
                             <section>
-                                <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 ${currentTheme.paragraph}`}>Appearance</h3>
+                                <label className="text-[10px] font-bold uppercase tracking-widest opacity-40 mb-3 block">Atmosphere</label>
                                 <div className="space-y-4">
-                                    <div>
-                                        <label className="text-sm block mb-2 opacity-80">Theme</label>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {(Object.keys(THEMES) as ThemeName[]).map(themeKey => (
-                                                <button key={themeKey} onClick={() => setThemeName(themeKey)} className={settingButtonClass(themeName === themeKey)}>
-                                                    {THEMES[themeKey].name}
-                                                </button>
-                                            ))}
-                                        </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {(Object.keys(THEMES) as ThemeName[]).map(t => (
+                                            <button key={t} onClick={() => setThemeName(t)} className={`py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${themeName === t ? currentTheme.sizeButton.active : currentTheme.sizeButton.inactive}`}>
+                                                {t}
+                                            </button>
+                                        ))}
                                     </div>
-                                    
-                                    <div className="flex justify-between items-center">
-                                        <label className="text-sm opacity-80">Pulse Animation</label>
-                                        <button onClick={() => setPulseEnabled(!pulseEnabled)} className={settingButtonClass(pulseEnabled)}>
-                                            {pulseEnabled ? 'ON' : 'OFF'}
+                                    <div className="flex justify-between items-center py-2 px-3 bg-white/5 rounded-xl">
+                                        <span className="text-xs opacity-60 font-bold uppercase tracking-wider">Pulse FX</span>
+                                        <button onClick={() => setPulseEnabled(!pulseEnabled)} className={`w-12 h-6 rounded-full transition-colors relative ${pulseEnabled ? 'bg-violet-600' : 'bg-white/10'}`}>
+                                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${pulseEnabled ? 'left-7' : 'left-1'}`} />
                                         </button>
                                     </div>
+                                </div>
+                            </section>
 
-                                    <div>
-                                        <label className="text-sm block mb-2 opacity-80">Win Animation</label>
-                                        <div className="flex gap-2">
-                                            {(['low', 'normal', 'high'] as WinIntensity[]).map(intensity => (
-                                                <button 
-                                                    key={intensity} 
-                                                    onClick={() => setWinIntensity(intensity)} 
-                                                    className={`flex-1 ${settingButtonClass(winIntensity === intensity)}`}
-                                                >
-                                                    {intensity.charAt(0).toUpperCase() + intensity.slice(1)}
+                            <section>
+                                <label className="text-[10px] font-bold uppercase tracking-widest opacity-40 mb-3 block">Audio Core</label>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center py-2 px-3 bg-white/5 rounded-xl">
+                                        <span className="text-xs opacity-60 font-bold uppercase tracking-wider">Sound Engine</span>
+                                        <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-12 h-6 rounded-full transition-colors relative ${soundEnabled ? 'bg-violet-600' : 'bg-white/10'}`}>
+                                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${soundEnabled ? 'left-7' : 'left-1'}`} />
+                                        </button>
+                                    </div>
+                                    {soundEnabled && (
+                                        <div className="grid grid-cols-2 gap-2 animate-fade-in-up">
+                                            {(['sine', 'square', 'sawtooth', 'triangle'] as Waveform[]).map(w => (
+                                                <button key={w} onClick={() => setWaveform(w)} className={`py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${waveform === w ? currentTheme.sizeButton.active : currentTheme.sizeButton.inactive}`}>
+                                                    {w}
                                                 </button>
                                             ))}
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             </section>
 
-                            <hr className="border-white/10" />
-
-                            {/* Sound */}
-                            <section>
-                                <div className="flex justify-between items-center mb-3">
-                                    <h3 className={`text-sm font-bold uppercase tracking-wider ${currentTheme.paragraph}`}>Sound</h3>
-                                    <button onClick={() => setSoundEnabled(!soundEnabled)} className={settingButtonClass(soundEnabled)}>
-                                        {soundEnabled ? 'ON' : 'OFF'}
-                                    </button>
-                                </div>
-                                {soundEnabled && (
-                                    <div className="space-y-4 animate-fade-in-up">
-                                        <div>
-                                            <label className="text-sm block mb-2 opacity-80">Waveform</label>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                {(['sine', 'square', 'sawtooth', 'triangle'] as Waveform[]).map(wave => (
-                                                    <button key={wave} onClick={() => setWaveform(wave)} className={settingButtonClass(waveform === wave)}>
-                                                        {wave.charAt(0).toUpperCase() + wave.slice(1)}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <label className="text-sm opacity-80">Interactive Audio</label>
-                                            <button onClick={() => setInteractiveSound(!interactiveSound)} className={settingButtonClass(interactiveSound)}>
-                                                {interactiveSound ? 'ON' : 'OFF'}
-                                            </button>
-                                        </div>
+                            {currentBestScore && (
+                                <section className="pt-4 border-t border-white/5">
+                                    <div className="text-[10px] font-bold uppercase tracking-widest opacity-40 mb-2">Personal Records</div>
+                                    <div className="flex justify-between items-center text-xs">
+                                        <span className="opacity-60">{boardSize}x{boardSize} {difficulty}</span>
+                                        <span className="font-black text-violet-400">{currentBestScore} Moves</span>
                                     </div>
-                                )}
-                            </section>
+                                </section>
+                            )}
                         </div>
-                    </div>
+                        
+                        <div className="mt-auto pt-4 text-[10px] opacity-20 uppercase tracking-[0.2em] text-center">Logic Grid v1.0.1</div>
+                    </aside>
                 </div>
             )}
 
-            {/* Reset Confirmation Modal */}
             {showResetConfirm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in-up" style={{animationDuration: '0.2s'}}>
-                    <div 
-                        className={`relative w-full max-w-sm p-6 rounded-xl shadow-2xl transform transition-all ${currentTheme.panel} border border-white/10`}
-                        role="dialog"
-                        aria-modal="true"
-                    >
-                        <h3 className={`text-xl font-bold mb-4 ${currentTheme.header}`}>Reset Game?</h3>
-                        <p className={`mb-6 ${currentTheme.paragraph}`}>
-                            Current progress will be lost. Are you sure you want to start over?
-                        </p>
-                        <div className="flex justify-end gap-3">
-                            <button 
-                                onClick={() => {
-                                    setShowResetConfirm(false);
-                                    setPendingResetConfig(null);
-                                }}
-                                className={`px-4 py-2 rounded-lg ${currentTheme.paragraph} hover:text-white hover:bg-white/10 transition-colors`}
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                onClick={() => executeReset(pendingResetConfig?.size, pendingResetConfig?.difficulty)}
-                                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold shadow-lg shadow-red-500/30 transition-all"
-                            >
-                                Confirm
-                            </button>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+                    <div className={`${currentTheme.panel} w-full max-w-xs p-6 rounded-3xl shadow-2xl animate-fade-in-up`}>
+                        <h3 className="text-xl font-black italic uppercase tracking-tighter mb-2">Reset Level?</h3>
+                        <p className="text-sm opacity-60 mb-6">Your current sequence will be discarded. Continue?</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowResetConfirm(false)} className="flex-1 py-3 rounded-xl bg-white/5 text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-colors">Abort</button>
+                            <button onClick={() => executeReset(pendingResetConfig?.size, pendingResetConfig?.difficulty)} className="flex-1 py-3 rounded-xl bg-red-600 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-red-600/30">Reset</button>
                         </div>
                     </div>
                 </div>

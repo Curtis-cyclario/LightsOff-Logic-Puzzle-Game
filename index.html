@@ -42,11 +42,9 @@
       @keyframes bump-scale {
         0%, 100% {
           transform: scale(1);
-          color: white;
         }
         50% {
           transform: scale(1.3);
-          color: #a78bfa; /* Corresponds to Tailwind's violet-400 */
         }
       }
       .move-counter-animate {
@@ -79,13 +77,13 @@
       .click-ripple {
         position: absolute;
         border-radius: 50%;
-        border: 2px solid; /* color set via style prop */
+        border: 2px solid;
         animation: ripple-effect 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         pointer-events: none;
       }
       .click-hit {
         position: absolute;
-        border-radius: 0.5rem; /* Tailwind's rounded-lg */
+        border-radius: 0.5rem;
         animation: cell-hit-effect 0.3s ease-out forwards;
         pointer-events: none;
       }
@@ -105,18 +103,17 @@
           transform: scale(0.5);
         }
         to {
-          opacity: 0.4; /* Match the start of win-glow */
-          transform: scale(0.9); /* Match the start of win-glow */
+          opacity: 0.4;
+          transform: scale(0.9);
         }
       }
       .win-glow-animate {
         animation: win-cell-entry 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards,
                    win-glow 2.5s ease-in-out 0.5s infinite;
       }
-      /* New Victory Animations */
       @keyframes victory-flash {
         0% { background-color: rgba(255, 255, 255, 0); }
-        15% { background-color: rgba(255, 255, 255, 0.6); }
+        15% { background-color: rgba(255, 255, 255, 0.4); }
         100% { background-color: rgba(255, 255, 255, 0); }
       }
       .victory-flash-animate {
@@ -131,12 +128,24 @@
         animation: victory-shockwave 1.5s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
       }
       @keyframes sparkle-twinkle {
-        0% { opacity: 0; transform: scale(0) rotate(0deg); }
-        50% { opacity: 1; transform: scale(1) rotate(180deg); }
-        100% { opacity: 0; transform: scale(0) rotate(360deg); }
+        0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+        50% { opacity: 1; transform: scale(1.2) rotate(180deg); }
       }
       .victory-sparkle {
         animation: sparkle-twinkle 2.5s ease-in-out infinite;
+      }
+      @keyframes drawer-slide-in {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+      }
+      .drawer-animate {
+        animation: drawer-slide-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .backdrop-fade {
+        transition: opacity 0.3s ease;
+      }
+      body {
+        overscroll-behavior-y: contain;
       }
     </style>
   <script type="importmap">
@@ -149,7 +158,7 @@
 }
 </script>
 </head>
-  <body class="bg-gray-900 text-white">
+  <body class="bg-gray-900 text-white selection:bg-violet-500/30">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
